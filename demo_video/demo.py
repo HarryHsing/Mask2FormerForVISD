@@ -133,6 +133,46 @@ if __name__ == "__main__":
         start_time = time.time()
         with autocast():
             predictions, visualized_output = demo.run_on_video(vid_frames)
+        # Harry
+        import pickle
+        import time
+        import torch
+        from detectron2.structures import Boxes, ImageList, Instances, BitMasks
+        result = list()
+        
+        print("Harry image_size: ", predictions['image_size'])
+        print("Harry0 name: ", args.input[0].split("/")[-2])
+        print("Harry1 path: ", args.input)
+        print("Harry2 length: ", len(predictions['pred_masks']), len(predictions['pred_masks'][0]))
+        print("Harry3 predictions: ", predictions)
+
+        print("Harry4 shape: ", predictions['pred_masks'][0].shape, type(predictions['pred_masks'][0]))
+
+        pred_boxes = []
+        for index in range(len(predictions['pred_masks'])):
+          pred_box = BitMasks(predictions['pred_masks'][index] > 0).get_bounding_boxes()
+          pred_boxes.append(pred_box.tensor)
+        print("Harry5 pred_boxes: ", pred_boxes)
+        
+        indexs = []
+        for path in args.input:
+          indexs.append(path.split("/")[-1])
+        temp = dict()
+        name = args.input[0].split("/")[-2]
+        temp['name'] = name
+        temp['indexs'] = indexs
+        temp['paths'] = args.input
+        temp['pred_classes'] = predictions['pred_labels']
+        temp['image_size'] = predictions['image_size']
+        temp['pred_scores'] = predictions['pred_scores']
+        temp['num_frames'] = len(predictions['pred_masks'][0])
+        temp['num_tracking_objects'] = len(predictions['pred_masks'])
+        temp['pred_masks'] = predictions['pred_masks']
+        temp['pred_boxes'] = pred_boxes
+        result.append(temp)
+        
+        # Harry End
+
         logger.info(
             "detected {} instances per frame in {:.2f}s".format(
                 len(predictions["pred_scores"]), time.time() - start_time
@@ -192,3 +232,12 @@ if __name__ == "__main__":
                 out.write(frame)
             cap.release()
             out.release()
+
+# Harry
+
+to_path = "/content/"
+result_file = open(to_path + name + '.pickle','wb')
+pickle.dump(result,result_file, protocol=pickle.HIGHEST_PROTOCOL)
+result_file.close()
+
+# Harry End
