@@ -140,19 +140,19 @@ if __name__ == "__main__":
         from detectron2.structures import Boxes, ImageList, Instances, BitMasks
         result = list()
         
-        print("Harry image_size: ", predictions['image_size'])
-        print("Harry0 name: ", args.input[0].split("/")[-2])
-        print("Harry1 path: ", args.input)
-        print("Harry2 length: ", len(predictions['pred_masks']), len(predictions['pred_masks'][0]))
-        print("Harry3 predictions: ", predictions)
+        # print("Harry image_size: ", predictions['image_size'])
+        # print("Harry0 name: ", args.input[0].split("/")[-2])
+        # print("Harry1 path: ", args.input)
+        # print("Harry2 length: ", len(predictions['pred_masks']), len(predictions['pred_masks'][0]))
+        # print("Harry3 predictions: ", predictions)
 
-        print("Harry4 shape: ", predictions['pred_masks'][0].shape, type(predictions['pred_masks'][0]))
+        # print("Harry4 shape: ", predictions['pred_masks'][0].shape, type(predictions['pred_masks'][0]))
 
         pred_boxes = []
         for index in range(len(predictions['pred_masks'])):
           pred_box = BitMasks(predictions['pred_masks'][index] > 0).get_bounding_boxes()
           pred_boxes.append(pred_box.tensor)
-        print("Harry5 pred_boxes: ", pred_boxes)
+        # print("Harry5 pred_boxes: ", pred_boxes)
         
         indexs = []
         for path in args.input:
@@ -170,6 +170,60 @@ if __name__ == "__main__":
         temp['pred_masks'] = predictions['pred_masks']
         temp['pred_boxes'] = pred_boxes
         result.append(temp)
+
+        # Save mask as png
+        import torchvision.transforms as transforms
+        import PIL.Image as I
+
+        def videoBinaryMaskIOU(mask1, mask2):
+          mask1_area = 0
+          mask2_area = 0
+          intersection = 0
+
+          for mask_index in range(len(mask1)):
+              mask1_area += np.count_nonzero(mask1[mask_index])
+              mask2_area += np.count_nonzero(mask2[mask_index])
+              intersection += np.count_nonzero(np.logical_and(mask1[mask_index], mask2[mask_index]))
+
+          if mask1_area + mask2_area - intersection == 0:
+              iou = 0
+          else:
+              iou = intersection / (mask1_area + mask2_area - intersection)
+          return iou
+
+        # NMS
+        used_pred_masks = predictions['pred_masks']
+        deleted_list = []
+        for index_nms0, masks_nms0 in enumerate(used_pred_masks):
+          for index_nms1, masks_nms1 in enumerate(used_pred_masks):
+            if index_nms0 == index_nms1: continue
+            if index_nms0 in deleted_list or index_nms1 in deleted_list: continue
+            IoU_score = videoBinaryMaskIOU(masks_nms0.detach().cpu().numpy(), masks_nms1.detach().cpu().numpy())
+            if IoU_score>0.1:
+              if predictions['pred_scores'][index_nms0] > predictions['pred_scores'][index_nms1]:
+                deleted_list.append(index_nms1)
+              else:
+                deleted_list.append(index_nms0)
+
+        deleted_list.sort()
+        deleted_list.reverse()
+        print(deleted_list)
+        for del_index in deleted_list:
+            used_pred_masks.pop(del_index)
+
+        mask_dir = name+"_mask"
+        os.mkdir("/content/" + mask_dir )
+        for index0, masks in enumerate(used_pred_masks):
+            os.mkdir("/content/" + mask_dir + "/" + str(index0) )
+            for index1, mask in enumerate(masks):
+                # print(mask.shape, type(mask), mask)
+                mask_1 = torch.ones(mask.shape)
+                save_mask = mask_1 * mask.long()
+                img = save_mask.detach().cpu().numpy()
+                I.fromarray(np.uint8(img * 255)).resize((img.shape[1],img.shape[0]),I.NEAREST)\
+                  .save("/content/" + mask_dir + "/" + str(index0) + "/" + str(index1+1).zfill(4) + '.png', format="png")
+
+        os.system("zip -r " + "/content/" + mask_dir + " " + "/content/" + mask_dir)
         
         # Harry End
 
